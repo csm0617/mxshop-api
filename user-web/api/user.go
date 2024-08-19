@@ -7,6 +7,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -66,11 +67,15 @@ func GetUserList(ctx *gin.Context) {
 		zap.S().Errorw("[GetUserList] 连接【用户服务失败】",
 			"msg", err.Error())
 	}
+	pn := ctx.DefaultQuery("pn", "0")
+	pnInt, _ := strconv.Atoi(pn)
+	pSize := ctx.DefaultQuery("pSize", "10")
+	pSizeInt, _ := strconv.Atoi(pSize)
 	//生成grpc的client并调用接口
 	userSrvClient := proto.NewUserClient(userConn)
 	rsp, err := userSrvClient.GetUserList(context.Background(), &proto.PageInfo{
-		Pn:    1,
-		PSize: 100,
+		Pn:    uint32(pnInt),
+		PSize: uint32(pSizeInt),
 	})
 	if err != nil {
 		zap.S().Errorw("[GetUserList] [查询用户列表]失败",
