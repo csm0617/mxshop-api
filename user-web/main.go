@@ -12,6 +12,11 @@ import (
 func main() {
 	//初始化全局Logger
 	initialize.InitLogger()
+	//初始化validator翻译器
+	if err := initialize.InitTrans("zh"); err != nil {
+		zap.S().Errorw("初始化翻译器失败：", err.Error())
+		panic(err)
+	}
 	//初始化全局Config
 	initialize.InitConfig()
 	//初始化Router
