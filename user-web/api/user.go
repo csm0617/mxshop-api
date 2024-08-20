@@ -146,9 +146,66 @@ func GetUserList(ctx *gin.Context) {
 	zap.S().Debug("获取用户列表页")
 }
 func PassWordLoginForm(ctx *gin.Context) {
+	//1.先校验前端传过来的参数
 	passWordLoginForm := forms.PassWordLoginForm{}
 	if err := ctx.ShouldBindJSON(&passWordLoginForm); err != nil {
 		HandleValidatorError(err, ctx)
 		return
 	}
+	//2.连接user_srv_grpc
+	ip := global.ServerConfig.UserSrvInfo.Host
+	port := global.ServerConfig.UserSrvInfo.Port
+	//grpc.WithInsecure()过时了，得用grpc.WithTransportCredentials(insecure.NewCredentials())方法代替
+	userConn, err := grpc.NewClient(fmt.Sprintf("%s:%d", ip, port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		zap.S().Errorw("[PassWordLoginForm] 连接【用户服务失败】",
+			"msg", err.Error())
+	}
+	//生成grpc的client并调用相关的接口
+	userSrvClient := proto.NewUserClient(userConn)
+
+	//登录逻辑
+	//1.先查询用户是否存在，如果不存在给出提示
+	if rsp, err := userSrvClient.GetUserByMobile(context.Background(), &proto.MobileRequest{
+		Mobile: passWordLoginForm.Mobile,
+	}); err != nil { //注意这个err是grpc返回的err有自己的一套状态码
+		if e, ok := status.FromError(err); ok {
+			switch e.Code() {
+			case codes.NotFound: //grpc没有找到
+				ctx.JSON(http.StatusBadRequest, map[string]string{ //http状态码返回400，请求参数不正确
+					"mobile": "用户不存在", //给出具体字段的错误描述
+				})
+			default: //其他错误，就提示一个登录失败
+				ctx.JSON(http.StatusInternalServerError, map[string]string{
+					"mobile": "登录失败",
+				})
+				//后台输出看看
+				zap.S().Infof("grpc [GetUserByMobile] 返回错误:%s", err.Error())
+			}
+			//有错误就终止这个逻辑
+			return
+		}
+	} else { //2.如果存在校验密码的正确性(grpc服务查询用户没有出错)
+		//调用grpc服务[CheckPassword]将表单中输入的密码和数据库中查到用户的密码进行比对
+		if passRsp, pasErr := userSrvClient.CheckPassword(context.Background(), &proto.PasswordCheckInfo{
+			Password:          passWordLoginForm.PassWord,
+			EncryptedPassword: rsp.Password,
+		}); pasErr != nil { //grpc调用返回的错误
+			ctx.JSON(http.StatusInternalServerError, map[string]string{
+				"password": "登录失败",
+			})
+		} else { //grpc调用过程中没有出现错误
+			if passRsp.Success { //密码校验成功
+				ctx.JSON(http.StatusOK, map[string]string{
+					"msg": "登录成功",
+				})
+				zap.S().Infof("手机号为【%s】的用户登录成功", passWordLoginForm.Mobile)
+			} else {
+				ctx.JSON(http.StatusBadRequest, map[string]string{
+					"password": "密码错误",
+				})
+			}
+		}
+	}
+
 }
