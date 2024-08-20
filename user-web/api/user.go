@@ -3,21 +3,44 @@ package api
 import (
 	"context"
 	"fmt"
+	"github.com/go-playground/validator/v10"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
+	"mxshop_api/user-web/forms"
 	"mxshop_api/user-web/global"
 	"mxshop_api/user-web/global/reponse"
 	"mxshop_api/user-web/proto"
 )
+
+/*
+*
+
+		去掉validator的返回的错误信息key的包相关的结构
+	    @param ctx
+	    @param c
+	    @author csm
+	    @date 2024/8/18 15:36
+*/
+func removeTopStruct(fileds map[string]string) map[string]string {
+	//初始化一个返回的map
+	rsp := map[string]string{}
+	for filed, err := range fileds {
+		//将validator的返回的错误信息进行处理，去掉key前面的package内容作为新的key
+		rsp[filed[strings.Index(filed, ".")+1:]] = err
+	}
+	//返回处理后的map
+	return rsp
+}
 
 /**
  * grpc返回的错误转为http返回
@@ -57,6 +80,22 @@ func HandleGrpcErrorToHttp(err error, c *gin.Context) {
 			return
 		}
 	}
+}
+
+func HandleValidatorError(err error, ctx *gin.Context) {
+	//怎么返回错误信息
+	//1.先看能不能转成校验错误
+	errs, ok := err.(validator.ValidationErrors)
+	if !ok { //如果不是校验错误那就返回原有的错误
+		ctx.JSON(http.StatusOK, gin.H{
+			"msg": err.Error(),
+		})
+	}
+	//否则将返回参数错误，并将错误信息处理后返回
+	ctx.JSON(http.StatusBadRequest, gin.H{
+		"error": removeTopStruct(errs.Translate(global.Trans)),
+	})
+	return
 }
 func GetUserList(ctx *gin.Context) {
 	ip := global.ServerConfig.UserSrvInfo.Host
@@ -105,5 +144,11 @@ func GetUserList(ctx *gin.Context) {
 	}
 	ctx.JSON(http.StatusOK, result)
 	zap.S().Debug("获取用户列表页")
-
+}
+func PassWordLoginForm(ctx *gin.Context) {
+	passWordLoginForm := forms.PassWordLoginForm{}
+	if err := ctx.ShouldBindJSON(&passWordLoginForm); err != nil {
+		HandleValidatorError(err, ctx)
+		return
+	}
 }
