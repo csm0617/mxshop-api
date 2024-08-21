@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"github.com/dgrijalva/jwt-go"
 	"github.com/go-playground/validator/v10"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -19,6 +20,8 @@ import (
 	"mxshop_api/user-web/forms"
 	"mxshop_api/user-web/global"
 	"mxshop_api/user-web/global/reponse"
+	"mxshop_api/user-web/middlewares"
+	"mxshop_api/user-web/models"
 	"mxshop_api/user-web/proto"
 )
 
@@ -196,8 +199,30 @@ func PassWordLoginForm(ctx *gin.Context) {
 			})
 		} else { //grpc调用过程中没有出现错误
 			if passRsp.Success { //密码校验成功
-				ctx.JSON(http.StatusOK, map[string]string{
-					"msg": "登录成功",
+				//生成token
+				j := middlewares.NewJWT()
+				claims := models.CustomClaims{
+					ID:          uint(rsp.Id),
+					NickName:    rsp.Nickname,
+					AuthorityId: uint(rsp.Role),
+					StandardClaims: jwt.StandardClaims{
+						NotBefore: time.Now().Unix(),                          //签名生效时间
+						ExpiresAt: time.Now().Add(time.Hour * 24 * 30).Unix(), //签名过期时间
+						Issuer:    "csm",                                      //签名的发行者
+					},
+				}
+				token, err := j.CreateToken(claims)
+				if err != nil {
+					ctx.JSON(http.StatusInternalServerError, map[string]string{
+						"token": "token生成失败",
+					})
+					return
+				}
+				ctx.JSON(http.StatusOK, gin.H{
+					"id":         rsp.Id,
+					"nick_name":  rsp.Nickname,
+					"token":      token,
+					"expired_at": claims.ExpiresAt * 1000,
 				})
 				zap.S().Infof("手机号为【%s】的用户登录成功", passWordLoginForm.Mobile)
 			} else {
