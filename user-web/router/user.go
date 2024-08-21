@@ -12,8 +12,10 @@ func InitUserRouter(router *gin.RouterGroup) {
 	UserRouter := router.Group("user")
 	//router下的api
 	{
-		//对访问用户列表加上登录的jwt验证
-		UserRouter.GET("list", middlewares.JWTAuth(), api.GetUserList)
+		//在访问用户列表之前
+		//1.先加上登录的jwt验证的中间件
+		//2.然后加上管理员权限校验的中间件
+		UserRouter.GET("list", middlewares.JWTAuth(), middlewares.IsAdminAuth(), api.GetUserList)
 		UserRouter.POST("login", api.PassWordLoginForm)
 
 	}
