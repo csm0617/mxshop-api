@@ -5,3 +5,7 @@ user-srv:
   port: 50051
 jwt:
   key: "U$A^3e8Jx9LFCECkMMs^EHwpTHjn9nOFVpoIKYD&"
+redis:
+  host: "192.168.200.188"
+  port: 6379
+  expire: 300

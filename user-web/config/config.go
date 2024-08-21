@@ -15,6 +15,12 @@ type JWTConfig struct {
 	SigningKey string `mapstructure:"key"`
 }
 
+type RedisConfig struct {
+	Host   string `mapstructure:"host"`
+	Port   int    `mapstructure:"port"`
+	Expire int    `mapstructure:"expire"`
+}
+
 /*
 当前user-web服务配置
 */
@@ -23,4 +29,5 @@ type ServerConfig struct {
 	Port        int           `mapstructure:"port"`
 	UserSrvInfo UserSrvConfig `mapstructure:"user-srv"`
 	JWTInfo     JWTConfig     `mapstructure:"jwt"`
+	RedisInfo   RedisConfig   `mapstructure:"redis"`
 }
