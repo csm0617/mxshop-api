@@ -109,6 +109,10 @@ func GetUserList(ctx *gin.Context) {
 		zap.S().Errorw("[GetUserList] 连接【用户服务失败】",
 			"msg", err.Error())
 	}
+	//打印当前访问用户的Id
+	claims, _ := ctx.Get("claims")               //返回的是接口类型，至于为什么能拿到claims，因为在jwt登录校验中间件中，如果jwt有效，我们将claims和id设置到了ctx中
+	currentUser := claims.(*models.CustomClaims) //转换成自定义声明的类型
+	zap.S().Infof("当前访问[GetUserList]的用户id为：【%d】", currentUser.ID)
 	pn := ctx.DefaultQuery("pn", "0")
 	pnInt, _ := strconv.Atoi(pn)
 	pSize := ctx.DefaultQuery("pSize", "10")
