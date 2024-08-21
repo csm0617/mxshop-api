@@ -90,9 +90,10 @@ func HandleValidatorError(err error, ctx *gin.Context) {
 	//1.先看能不能转成校验错误
 	errs, ok := err.(validator.ValidationErrors)
 	if !ok { //如果不是校验错误那就返回原有的错误
-		ctx.JSON(http.StatusOK, gin.H{
+		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"msg": err.Error(),
 		})
+		return
 	}
 	//否则将返回参数错误，并将错误信息处理后返回
 	ctx.JSON(http.StatusBadRequest, gin.H{
@@ -152,11 +153,19 @@ func GetUserList(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, result)
 	zap.S().Debug("获取用户列表页")
 }
+
 func PassWordLoginForm(ctx *gin.Context) {
 	//1.先校验前端传过来的参数
 	passWordLoginForm := forms.PassWordLoginForm{}
 	if err := ctx.ShouldBindJSON(&passWordLoginForm); err != nil {
 		HandleValidatorError(err, ctx)
+		return
+	}
+	//校验用户输入的验证码
+	if !store.Verify(passWordLoginForm.CaptchaId, passWordLoginForm.Captcha, true) { //true:校验后立即清除store的验证码
+		ctx.JSON(http.StatusBadRequest, map[string]string{
+			"msg": "验证码输入错误",
+		})
 		return
 	}
 	//2.连接user_srv_grpc
