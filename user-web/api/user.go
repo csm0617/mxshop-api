@@ -11,12 +11,9 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"github.com/hashicorp/consul/api"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
 	"mxshop_api/user-web/forms"
@@ -104,41 +101,7 @@ func HandleValidatorError(err error, ctx *gin.Context) {
 	return
 }
 func GetUserList(ctx *gin.Context) {
-	//先设置配置信息
-	config := api.DefaultConfig()
-	consulInfo := global.ServerConfig.ConsulInfo
-	config.Address = fmt.Sprintf("%s:%d", consulInfo.Host, consulInfo.Port)
-	//根据配置信息拿到consul客户端实例
-	client, err := api.NewClient(config)
-	if err != nil {
-		zap.S().Fatal("consul client init failed")
-		panic(err)
-	}
-	userSrvName := global.ServerConfig.UserSrvInfo.Name
-	filterStr := fmt.Sprintf(`Service = "%s"`, userSrvName)
-	userSrvs, err := client.Agent().ServicesWithFilter(filterStr)
-	if err != nil {
-		zap.S().Infof(err.Error())
-		//zap.S().Fatalf("get %ss failed,error:", userSrvName)
-	}
-	var userSrvHost string
-	var userSrvPort int
-	for _, service := range userSrvs {
-		userSrvHost = service.Address
-		userSrvPort = service.Port
-	}
-	if userSrvHost == "" || userSrvPort == 0 {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"msg": "用户服务不可达",
-		})
-		return
-	}
-	//grpc.WithInsecure()过时了，得用grpc.WithTransportCredentials(insecure.NewCredentials())方法代替
-	userConn, err := grpc.NewClient(fmt.Sprintf("%s:%d", userSrvHost, userSrvPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		zap.S().Errorw("[GetUserList] 连接【用户服务失败】",
-			"msg", err.Error())
-	}
+
 	//打印当前访问用户的Id
 	claims, _ := ctx.Get("claims")               //返回的是接口类型，至于为什么能拿到claims，因为在jwt登录校验中间件中，如果jwt有效，我们将claims和id设置到了ctx中
 	currentUser := claims.(*models.CustomClaims) //转换成自定义声明的类型
@@ -147,9 +110,8 @@ func GetUserList(ctx *gin.Context) {
 	pnInt, _ := strconv.Atoi(pn)
 	pSize := ctx.DefaultQuery("pSize", "10")
 	pSizeInt, _ := strconv.Atoi(pSize)
-	//生成grpc的client并调用接口
-	userSrvClient := proto.NewUserClient(userConn)
-	rsp, err := userSrvClient.GetUserList(context.Background(), &proto.PageInfo{
+
+	rsp, err := global.UserSrvClient.GetUserList(context.Background(), &proto.PageInfo{
 		Pn:    uint32(pnInt),
 		PSize: uint32(pSizeInt),
 	})
@@ -197,21 +159,9 @@ func PassWordLoginForm(ctx *gin.Context) {
 		})
 		return
 	}
-	//2.连接user_srv_grpc
-	ip := global.ServerConfig.UserSrvInfo.Host
-	port := global.ServerConfig.UserSrvInfo.Port
-	//grpc.WithInsecure()过时了，得用grpc.WithTransportCredentials(insecure.NewCredentials())方法代替
-	userConn, err := grpc.NewClient(fmt.Sprintf("%s:%d", ip, port), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		zap.S().Errorw("[PassWordLoginForm] 连接【用户服务失败】",
-			"msg", err.Error())
-	}
-	//生成grpc的client并调用相关的接口
-	userSrvClient := proto.NewUserClient(userConn)
-
 	//登录逻辑
 	//1.先查询用户是否存在，如果不存在给出提示
-	if rsp, err := userSrvClient.GetUserByMobile(context.Background(), &proto.MobileRequest{
+	if rsp, err := global.UserSrvClient.GetUserByMobile(context.Background(), &proto.MobileRequest{
 		Mobile: passWordLoginForm.Mobile,
 	}); err != nil { //注意这个err是grpc返回的err有自己的一套状态码
 		if e, ok := status.FromError(err); ok {
@@ -232,7 +182,7 @@ func PassWordLoginForm(ctx *gin.Context) {
 		}
 	} else { //2.如果存在校验密码的正确性(grpc服务查询用户没有出错)
 		//调用grpc服务[CheckPassword]将表单中输入的密码和数据库中查到用户的密码进行比对
-		if passRsp, pasErr := userSrvClient.CheckPassword(context.Background(), &proto.PasswordCheckInfo{
+		if passRsp, pasErr := global.UserSrvClient.CheckPassword(context.Background(), &proto.PasswordCheckInfo{
 			Password:          passWordLoginForm.PassWord,
 			EncryptedPassword: rsp.Password,
 		}); pasErr != nil { //grpc调用返回的错误
@@ -302,13 +252,7 @@ func Register(ctx *gin.Context) {
 		}
 	}
 	//3.验证码匹配成功，调用grpc创建用户
-	userConn, err := grpc.NewClient(fmt.Sprintf("%s:%d", global.ServerConfig.UserSrvInfo.Host, global.ServerConfig.UserSrvInfo.Port), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		zap.S().Errorw("[register] 连接【用户服务失败】",
-			"msg", err.Error())
-	}
-	userSrvClient := proto.NewUserClient(userConn)
-	if rsp, err := userSrvClient.CreateUser(context.Background(), &proto.CreatUserInfo{
+	if rsp, err := global.UserSrvClient.CreateUser(context.Background(), &proto.CreatUserInfo{
 		Mobile:   registerForm.Mobile,
 		Nickname: registerForm.Mobile,
 		PassWord: registerForm.PassWord,
