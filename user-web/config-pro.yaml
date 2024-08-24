@@ -9,3 +9,6 @@ redis:
   host: "192.168.200.188"
   port: 6379
   expire: 300
+consul:
+  host: "192.168.200.188"
+  port: 8500

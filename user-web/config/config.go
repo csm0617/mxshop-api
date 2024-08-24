@@ -15,10 +15,23 @@ type JWTConfig struct {
 	SigningKey string `mapstructure:"key"`
 }
 
+/*
+*
+redis配置
+*/
 type RedisConfig struct {
 	Host   string `mapstructure:"host"`
 	Port   int    `mapstructure:"port"`
 	Expire int    `mapstructure:"expire"`
+}
+
+/*
+*
+consul配置
+*/
+type ConsulConfig struct {
+	Host string `mapstructure:"host" json:"host"`
+	Port int    `mapstructure:"port" json:"port"`
 }
 
 /*
@@ -30,4 +43,5 @@ type ServerConfig struct {
 	UserSrvInfo UserSrvConfig `mapstructure:"user-srv"`
 	JWTInfo     JWTConfig     `mapstructure:"jwt"`
 	RedisInfo   RedisConfig   `mapstructure:"redis"`
+	ConsulInfo  ConsulConfig  `mapstructure:"consul"`
 }
