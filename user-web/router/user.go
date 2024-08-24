@@ -17,7 +17,7 @@ func InitUserRouter(router *gin.RouterGroup) {
 		//2.然后加上管理员权限校验的中间件
 		UserRouter.GET("list", middlewares.JWTAuth(), middlewares.IsAdminAuth(), api.GetUserList)
 		UserRouter.POST("login", api.PassWordLoginForm)
-
+		UserRouter.POST("register", api.Register)
 	}
 
 }
