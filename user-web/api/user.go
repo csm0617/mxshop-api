@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/go-playground/validator/v10"
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
@@ -244,6 +245,74 @@ func PassWordLoginForm(ctx *gin.Context) {
 				})
 			}
 		}
+	}
+}
+
+func Register(ctx *gin.Context) {
+	registerForm := forms.RegisterForm{}
+	//1.先进行字段校验
+	if err := ctx.ShouldBindJSON(&registerForm); err != nil {
+		HandleValidatorError(err, ctx)
+		return
+	}
+	//2.拿到redis中的手机验证码，比对验证码是否正确
+	rdb := redis.NewClient(&redis.Options{
+		Addr: fmt.Sprintf("%s:%d", global.ServerConfig.RedisInfo.Host, global.ServerConfig.RedisInfo.Port),
+	})
+	result, err := rdb.Get(context.Background(), registerForm.Mobile).Result()
+	if err != nil { //redis没有这个手机号的验证码
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"msg": "验证码错误",
+		})
+		return
+	} else { //输入的验证码和redis中保存的验证码不匹配
+		if result != registerForm.Code {
+			ctx.JSON(http.StatusBadRequest, gin.H{
+				"msg": "验证码错误",
+			})
+			return
+		}
+	}
+	//3.验证码匹配成功，调用grpc创建用户
+	userConn, err := grpc.NewClient(fmt.Sprintf("%s:%d", global.ServerConfig.UserSrvInfo.Host, global.ServerConfig.UserSrvInfo.Port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		zap.S().Errorw("[register] 连接【用户服务失败】",
+			"msg", err.Error())
+	}
+	userSrvClient := proto.NewUserClient(userConn)
+	if rsp, err := userSrvClient.CreateUser(context.Background(), &proto.CreatUserInfo{
+		Mobile:   registerForm.Mobile,
+		Nickname: registerForm.Mobile,
+		PassWord: registerForm.PassWord,
+	}); err != nil {
+		HandleGrpcErrorToHttp(err, ctx)
+	} else {
+		//生成token
+		j := middlewares.NewJWT()
+		claims := models.CustomClaims{
+			ID:          uint(rsp.Id),
+			NickName:    rsp.Nickname,
+			AuthorityId: uint(rsp.Role),
+			StandardClaims: jwt.StandardClaims{
+				NotBefore: time.Now().Unix(),                          //签名生效时间
+				ExpiresAt: time.Now().Add(time.Hour * 24 * 30).Unix(), //签名过期时间
+				Issuer:    "csm",                                      //签名的发行者
+			},
+		}
+		token, err := j.CreateToken(claims)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, map[string]string{
+				"token": "token生成失败",
+			})
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{
+			"id":         rsp.Id,
+			"nick_name":  rsp.Nickname,
+			"token":      token,
+			"expired_at": claims.ExpiresAt * 1000,
+		})
+		zap.S().Infof("手机号为【%s】的用户注册成功", registerForm.Mobile)
 	}
 
 }
