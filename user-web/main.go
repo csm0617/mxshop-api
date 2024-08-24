@@ -23,6 +23,8 @@ func main() {
 	}
 	//初始化全局Config
 	initialize.InitConfig()
+	//初始化grpc服务客户端
+	initialize.InitSrvClient()
 	//初始化Router
 	Routers := initialize.Routers()
 	//注册验证器
