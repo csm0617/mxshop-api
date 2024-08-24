@@ -3,20 +3,21 @@ package api
 import (
 	"context"
 	"fmt"
-	"github.com/dgrijalva/jwt-go"
-	"github.com/go-playground/validator/v10"
-	"github.com/redis/go-redis/v9"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
+	"github.com/hashicorp/consul/api"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	"mxshop_api/user-web/forms"
 	"mxshop_api/user-web/global"
@@ -103,10 +104,37 @@ func HandleValidatorError(err error, ctx *gin.Context) {
 	return
 }
 func GetUserList(ctx *gin.Context) {
-	ip := global.ServerConfig.UserSrvInfo.Host
-	port := global.ServerConfig.UserSrvInfo.Port
+	//先设置配置信息
+	config := api.DefaultConfig()
+	consulInfo := global.ServerConfig.ConsulInfo
+	config.Address = fmt.Sprintf("%s:%d", consulInfo.Host, consulInfo.Port)
+	//根据配置信息拿到consul客户端实例
+	client, err := api.NewClient(config)
+	if err != nil {
+		zap.S().Fatal("consul client init failed")
+		panic(err)
+	}
+	userSrvName := global.ServerConfig.UserSrvInfo.Name
+	filterStr := fmt.Sprintf(`Service = "%s"`, userSrvName)
+	userSrvs, err := client.Agent().ServicesWithFilter(filterStr)
+	if err != nil {
+		zap.S().Infof(err.Error())
+		//zap.S().Fatalf("get %ss failed,error:", userSrvName)
+	}
+	var userSrvHost string
+	var userSrvPort int
+	for _, service := range userSrvs {
+		userSrvHost = service.Address
+		userSrvPort = service.Port
+	}
+	if userSrvHost == "" || userSrvPort == 0 {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"msg": "用户服务不可达",
+		})
+		return
+	}
 	//grpc.WithInsecure()过时了，得用grpc.WithTransportCredentials(insecure.NewCredentials())方法代替
-	userConn, err := grpc.NewClient(fmt.Sprintf("%s:%d", ip, port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	userConn, err := grpc.NewClient(fmt.Sprintf("%s:%d", userSrvHost, userSrvPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		zap.S().Errorw("[GetUserList] 连接【用户服务失败】",
 			"msg", err.Error())
