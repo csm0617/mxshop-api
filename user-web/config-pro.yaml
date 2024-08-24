@@ -1,8 +1,9 @@
 name: "user-web"
-host: "192.168.0.123"
+host: "192.168.58.237"
 port: 8021
 user-srv:
-  host: "127.0.0.1"
+  name: "user-srv"
+  host: "192.168.58.237"
   port: 50051
 jwt:
   key: "U$A^3e8Jx9LFCECkMMs^EHwpTHjn9nOFVpoIKYD&"

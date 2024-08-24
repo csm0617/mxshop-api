@@ -4,6 +4,7 @@ package config
 user-grpc服务配置
 */
 type UserSrvConfig struct {
+	Name string `mapstructure:"name"`
 	Host string `mapstructure:"host"`
 	Port int    `mapstructure:"port"`
 }
