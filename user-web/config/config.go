@@ -39,6 +39,7 @@ type ConsulConfig struct {
 */
 type ServerConfig struct {
 	Name        string        `mapstructure:"name"`
+	Host        string        `mapstructure:"host"`
 	Port        int           `mapstructure:"port"`
 	UserSrvInfo UserSrvConfig `mapstructure:"user-srv"`
 	JWTInfo     JWTConfig     `mapstructure:"jwt"`
