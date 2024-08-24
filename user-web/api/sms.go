@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"go.uber.org/zap"
 	"net/http"
 	"strings"
 	"time"
@@ -42,8 +43,9 @@ func SendSms(ctx *gin.Context) {
 		Addr: fmt.Sprintf("%s:%d", global.ServerConfig.RedisInfo.Host, global.ServerConfig.RedisInfo.Port),
 	})
 	rdb.Set(context.Background(), sendSmsForm.Mobile, smsCode, time.Duration(global.ServerConfig.RedisInfo.Expire)*time.Second)
+	zap.S().Infof("手机号：%s的验证码为：【%s】", sendSmsForm.Mobile, smsCode)
 	ctx.JSON(http.StatusOK, gin.H{
-		"msg": fmt.Sprintf("验证码发送成功:【%s】", smsCode),
+		"msg": fmt.Sprintf("短信验证码发送成功!"),
 	})
 
 }
